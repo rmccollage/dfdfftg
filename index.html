@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Samco Resorts – Room photos</title>
+<style>
+:root{--fg:#1a1a1a;--muted:#757575;--line:#e5e5e5;--err:#b3261e;--ok:#2e7d32}
+*{box-sizing:border-box}
+body{margin:0;background:#fff;color:var(--fg);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:640px;margin:0 auto;padding:48px 20px 80px}
+h1{font-size:22px;font-weight:600;margin:0}
+.sub{color:var(--muted);margin:4px 0 0}
+svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+button{font:inherit;cursor:pointer}
+button:focus-visible,.add:focus-within{outline:2px solid var(--fg);outline-offset:2px}
+.opts{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin:28px 0 8px;font-size:14px;color:var(--muted)}
+.opts label,.link{display:flex;gap:8px;align-items:center;cursor:pointer}
+.link{background:none;border:0;padding:0;color:var(--fg)}
+.link:hover{text-decoration:underline;text-underline-offset:3px}
+.room{padding:22px 0;border-top:1px solid var(--line)}
+.head{display:flex;justify-content:space-between;gap:12px;align-items:baseline}
+.head h2{font-size:16px;font-weight:500;margin:0}
+.price,.count{color:var(--muted);font-size:13px}
+.row{display:flex;justify-content:space-between;align-items:center;margin-top:10px}
+.add{display:flex;gap:8px;align-items:center;border:1px solid var(--line);border-radius:6px;padding:6px 12px;font-size:14px;cursor:pointer}
+.add:hover{border-color:var(--fg)}
+.add input{display:none}
+.preview{display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:8px;margin-top:12px}
+.preview:empty{display:none}
+.photo{position:relative;aspect-ratio:1;border-radius:6px;overflow:hidden;background:var(--line)}
+.photo img{width:100%;height:100%;object-fit:cover;display:block}
+.photo.sent img{opacity:.35}
+.photo.sent::after{content:"";position:absolute;left:6px;bottom:6px;width:20px;height:20px;border-radius:50%;background:var(--ok) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E") center/14px no-repeat}
+.remove{position:absolute;top:4px;right:4px;width:24px;height:24px;display:grid;place-items:center;border:0;border-radius:50%;background:rgba(0,0,0,.65);color:#fff;padding:0}
+.remove svg{width:13px;height:13px;stroke-width:2.4}
+.send{width:100%;margin-top:24px;padding:14px;border:0;border-radius:6px;background:var(--fg);color:#fff;font-weight:600;display:flex;gap:8px;align-items:center;justify-content:center}
+.send:disabled,.link:disabled{opacity:.5;cursor:not-allowed}
+.status{margin-top:14px;font-size:14px;color:var(--muted);white-space:pre-wrap;min-height:20px}
+.status.err{color:var(--err)}.status.ok{color:var(--ok)}
+</style>
+</head>
+<body>
+<main>
+  <h1>Samco Resorts</h1>
+  <p class="sub">Add photos for each room, then send them.</p>
+
+  <div class="opts">
+    <label><input type="checkbox" id="asFile"> Original quality</label>
+    <button class="link" id="testButton" type="button">
+      <svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Check connection
+    </button>
+  </div>
+
+  <div id="rooms"></div>
+  <button class="send" id="sendButton" type="button"></button>
+  <div class="status" id="status" role="status"></div>
+</main>
+
+<script>
+// Paste your bot token and chat ID here.
+// Anyone who can open this file can read them, so keep the file private.
+const BOT_TOKEN = "PASTE_BOT_TOKEN";
+const CHAT_ID   = "PASTE_CHAT_ID";
+
+const ICON = {
+  image:'<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="9" cy="10" r="1.6"/><path d="M21 16l-5-5-8 8"/></svg>',
+  plus:'<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>',
+  close:'<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+  send:'<svg viewBox="0 0 24 24"><path d="M12 19V5M5.5 11.5L12 5l6.5 6.5"/></svg>'
+};
+const SEND_LABEL = ICON.send + "Send photos";
+
+const roomData = [
+  {name:"Non-AC Single Bed Room", category:"Non-AC", price:999},
+  {name:"Non-AC Standard Room", category:"Non-AC", price:1500},
+  {name:"Non-AC Deluxe Room", category:"Non-AC", price:2000},
+  {name:"AC Deluxe Room", category:"AC", price:3000},
+  {name:"AC Single Bedroom with Balcony", category:"AC", price:3600},
+  {name:"Two-Bedroom Family Suite", category:"Two-Bedroom", price:3500},
+  {name:"Non-AC Cottage", category:"Non-AC", price:5000}
+];
+
+const selected = roomData.map(() => []);
+const roomsContainer = document.getElementById("rooms");
+const sendButton = document.getElementById("sendButton");
+const testButton = document.getElementById("testButton");
+const statusBox = document.getElementById("status");
+const asFile = document.getElementById("asFile");
+sendButton.innerHTML = SEND_LABEL;
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const setStatus = (msg, cls) => { statusBox.textContent = msg; statusBox.className = "status " + (cls || ""); };
+const configured = () => !BOT_TOKEN.startsWith("PASTE_") && !CHAT_ID.startsWith("PASTE_");
+
+roomData.forEach((room, index) => {
+  const section = document.createElement("section");
+  section.className = "room";
+  section.innerHTML = `
+    <div class="head">
+      <h2>${room.name}</h2>
+      <span class="price">₹${room.price.toLocaleString("en-IN")} / night</span>
+    </div>
+    <div class="row">
+      <span class="count">No photos</span>
+      <label class="add">${ICON.image}Add photos<input type="file" accept="image/*" multiple></label>
+    </div>
+    <div class="preview"></div>`;
+
+  const input = section.querySelector("input");
+  input.addEventListener("change", () => {
+    for (const file of input.files) {
+      if (file.type.startsWith("image/") || /\.(jpe?g|png|webp|heic)$/i.test(file.name)) {
+        selected[index].push({file, url: URL.createObjectURL(file), sent:false});
+      }
+    }
+    input.value = "";
+    renderPreview(index);
+  });
+  roomsContainer.appendChild(section);
+});
+
+function renderPreview(index){
+  const section = roomsContainer.children[index];
+  const preview = section.querySelector(".preview");
+  preview.innerHTML = "";
+  selected[index].forEach(item => {
+    const div = document.createElement("div");
+    div.className = "photo" + (item.sent ? " sent" : "");
+    const img = document.createElement("img");
+    img.src = item.url;
+    img.alt = "";
+    const btn = document.createElement("button");
+    btn.className = "remove"; btn.type = "button"; btn.innerHTML = ICON.close;
+    btn.setAttribute("aria-label", "Remove photo");
+    btn.onclick = () => {
+      URL.revokeObjectURL(item.url);
+      selected[index] = selected[index].filter(x => x !== item);
+      renderPreview(index);
+    };
+    div.append(img, btn);
+    preview.appendChild(div);
+  });
+  const total = selected[index].length;
+  const pending = selected[index].filter(x => !x.sent).length;
+  section.querySelector(".count").textContent =
+    total === 0 ? "No photos" : pending === total ? `${total} selected` : `${total} selected, ${pending} to send`;
+}
+
+async function tg(method, form, attempt = 0){
+  let res;
+  try {
+    res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/${method}`, {method:"POST", body: form});
+  } catch (e) {
+    throw new Error("Can't connect. Check your internet and open this file in Chrome.");
+  }
+  let data = {};
+  try { data = await res.json(); } catch(e) {}
+  if (res.status === 429 && attempt < 5) {
+    const wait = ((data.parameters && data.parameters.retry_after) || 5) + 1;
+    setStatus(`Too many requests. Waiting ${wait}s…`);
+    await sleep(wait * 1000);
+    return tg(method, form, attempt + 1);
+  }
+  if (!res.ok || !data.ok) throw new Error(data.description || `HTTP ${res.status}`);
+  return data;
+}
+
+function buildForm(file, room, fieldName){
+  const f = new FormData();
+  f.append("chat_id", CHAT_ID);
+  f.append(fieldName, file, file.name || "photo.jpg");
+  f.append("caption", `Samco Resorts\n${room.name}\n${room.category}, ₹${room.price}/night`);
+  return f;
+}
+
+async function sendOne(file, room){
+  if (asFile.checked) return tg("sendDocument", buildForm(file, room, "document"));
+  try {
+    return await tg("sendPhoto", buildForm(file, room, "photo"));
+  } catch (e) {
+    if (/too big|PHOTO_|dimensions|IMAGE_PROCESS|wrong file/i.test(e.message))
+      return tg("sendDocument", buildForm(file, room, "document"));
+    throw e;
+  }
+}
+
+testButton.addEventListener("click", async () => {
+  if (!configured()) return setStatus("Add your bot token and chat ID in the code first.", "err");
+  testButton.disabled = true;
+  setStatus("Checking…");
+  try {
+    const me = await (await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getMe`)).json();
+    if (!me.ok) throw new Error(me.description);
+    const f = new FormData();
+    f.append("chat_id", CHAT_ID);
+    f.append("text", "Test message from the Samco photo page");
+    await tg("sendMessage", f);
+    setStatus("Connected. A test message was sent.", "ok");
+  } catch (e) {
+    setStatus("Connection failed: " + e.message, "err");
+  }
+  testButton.disabled = false;
+});
+
+sendButton.addEventListener("click", async () => {
+  if (!configured()) return setStatus("Add your bot token and chat ID in the code first.", "err");
+  const total = selected.reduce((n, list) => n + list.filter(x => !x.sent).length, 0);
+  if (total === 0) return setStatus("Add at least one photo first.", "err");
+
+  sendButton.disabled = true;
+  let sent = 0, failed = 0, lastError = "";
+
+  for (let i = 0; i < roomData.length; i++) {
+    for (const item of selected[i].filter(x => !x.sent)) {
+      sendButton.textContent = `Sending ${sent + failed + 1} of ${total}…`;
+      try {
+        await sendOne(item.file, roomData[i]);
+        item.sent = true;
+        sent++;
+      } catch (e) {
+        console.error(e);
+        lastError = e.message;
+        failed++;
+      }
+      renderPreview(i);
+      setStatus(`Sent ${sent}, failed ${failed}` + (lastError ? `\n${lastError}` : ""));
+      await sleep(1100);
+    }
+  }
+
+  sendButton.disabled = false;
+  sendButton.innerHTML = SEND_LABEL;
+
+  if (failed === 0) {
+    selected.forEach((list, i) => {
+      list.forEach(x => URL.revokeObjectURL(x.url));
+      selected[i] = [];
+      renderPreview(i);
+    });
+    setStatus(`Sent ${sent} photos.`, "ok");
+  } else {
+    setStatus(`Sent ${sent}, failed ${failed}.\n${lastError}\nPhotos marked with a tick were sent. Press Send photos to retry the rest.`, "err");
+  }
+});
+</script>
+</body>
+</html>
